@@ -3,6 +3,12 @@
 import tensorflow as tf
 import numpy as np
 import os
+
+import os
+
+from os.path import join
+from os.path import isdir
+from os import listdir
 import time
 import datetime
 import data_helpers
@@ -22,8 +28,8 @@ with open("config.yml", 'r') as ymlfile:
 
 # Eval Parameters
 tf.flags.DEFINE_integer("batch_size", 64, "Batch Size (default: 64)")
-tf.flags.DEFINE_string("checkpoint_dir", "", "Checkpoint directory from training run")
-tf.flags.DEFINE_boolean("eval_train", False, "Evaluate on all training data")
+tf.flags.DEFINE_string("checkpoint_dir", "./runs/1493013586/checkpoints", "Checkpoint directory from training run")
+tf.flags.DEFINE_boolean("eval_train", True, "Evaluate on all training data")
 
 # Misc Parameters
 tf.flags.DEFINE_boolean("allow_soft_placement", True, "Allow device soft device placement")
@@ -50,7 +56,12 @@ if FLAGS.eval_train:
                                               categories=cfg["datasets"][dataset_name]["categories"],
                                               shuffle=cfg["datasets"][dataset_name]["shuffle"],
                                               random_state=cfg["datasets"][dataset_name]["random_state"])
+    elif dataset_name == "localdata":
+        datasets = data_helpers.get_datasets_localdata(container_path=cfg["datasets"][dataset_name]["test_path"],
+                                                       categories=None,
+                                                       shuffle=False)
     x_raw, y_test = data_helpers.load_data_labels(datasets)
+    #y_test = None
     y_test = np.argmax(y_test, axis=1)
     print("Total number of test examples: {}".format(len(y_test)))
 else:
@@ -109,9 +120,26 @@ if y_test is not None:
     print(metrics.classification_report(y_test, all_predictions, target_names=datasets['target_names']))
     print(metrics.confusion_matrix(y_test, all_predictions))
 
+container_path = cfg["datasets"][dataset_name]["container_path"]
+folders = [f for f in sorted(listdir(container_path))
+           if isdir(join(container_path, f))]
+
+targets = dict()
+for label, folder in enumerate(folders):
+    targets[label] = folder
+
+ips = []
+filenames = datasets['filenames']
+for filename in filenames:
+    ips.append(os.path.basename(filename))
+
+cats = []
+for p in all_predictions:
+    cats.append(targets[int(p)])
 # Save the evaluation to a csv
-predictions_human_readable = np.column_stack((np.array(x_raw), all_predictions))
+predictions_human_readable = np.column_stack((ips, np.array(x_raw), all_predictions, cats))
 out_path = os.path.join(FLAGS.checkpoint_dir, "..", "prediction.csv")
 print("Saving evaluation to {0}".format(out_path))
 with open(out_path, 'w') as f:
     csv.writer(f).writerows(predictions_human_readable)
+
